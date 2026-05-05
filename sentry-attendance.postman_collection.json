@@ -1,0 +1,733 @@
+{
+  "info": {
+    "_postman_id": "sentry-attendance-collection-v1",
+    "name": "SENTRY — Attendance API",
+    "description": "Postman collection for the SENTRY Attendance Management System.\n\n## What's in here\n\n1. **FastAPI backend endpoints** — the production REST API documented in the README's Migration section. Use these once your FastAPI backend is running locally or on Render.\n2. **Gemini API call** — the actual external call the single-file app makes from the browser. Test it standalone.\n\n## How to use\n\n1. Import this collection into Postman\n2. Open **Variables** (collection-level) and set:\n   - `baseUrl` — your backend URL (default: `http://localhost:8000`)\n   - `geminiKey` — your Gemini API key from https://aistudio.google.com/apikey\n3. Run **Auth → Login** first — the token is auto-saved to `{{token}}` and used by every other authenticated request\n4. Use **Attendance → Punch In** to create a record — its ID auto-saves to `{{attendanceId}}`, then **Overtime → Request** uses it\n\n## Auth model\n\nBearer JWT in `Authorization` header on every authenticated route. Login response saves token automatically via test script.\n\n## Roles\n\n- `employee` — punch in/out, view own data, request overtime\n- `manager` — approve/reject overtime, view team data, AI assistant, reports\n- `admin` — everything above + user management, flag invalid records",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Signup, login, and current-user lookup. Login auto-saves the JWT to `{{token}}`.",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "signup"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aman Verma\",\n  \"email\": \"aman@sentry.dev\",\n  \"password\": \"correcthorsebatterystaple\",\n  \"role\": \"employee\"\n}"
+            },
+            "description": "Create a new user account.\n\n**Body**\n- `name` (string, required)\n- `email` (string, required, unique)\n- `password` (string, required, min 6 chars)\n- `role` (enum: `employee` | `manager` | `admin`)\n\n**Returns** `{ user, token }` — token is auto-saved by the test script."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.token) pm.collectionVariables.set('token', data.token);",
+                  "  if (data.user?.id) pm.collectionVariables.set('userId', data.user.id);",
+                  "  pm.test('returns user and token', () => {",
+                  "    pm.expect(data).to.have.property('user');",
+                  "    pm.expect(data).to.have.property('token');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Aman Verma\",\n  \"email\": \"aman@sentry.dev\",\n  \"password\": \"correcthorsebatterystaple\",\n  \"role\": \"employee\"\n}"
+                },
+                "url": "{{baseUrl}}/api/auth/signup"
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"user\": {\n    \"id\": \"65f1a2b3c4d5e6f7a8b9c0d1\",\n    \"name\": \"Aman Verma\",\n    \"email\": \"aman@sentry.dev\",\n    \"role\": \"employee\",\n    \"disabled\": false,\n    \"face_enrolled\": false,\n    \"created_at\": \"2026-05-05T10:30:00Z\"\n  },\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"aman@sentry.dev\",\n  \"password\": \"correcthorsebatterystaple\"\n}"
+            },
+            "description": "Authenticate and receive a JWT.\n\n**Body**\n- `email` (string, required)\n- `password` (string, required)\n\n**Returns** `{ user, token }` — token is auto-saved to `{{token}}` and used by all subsequent requests."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.token) pm.collectionVariables.set('token', data.token);",
+                  "  if (data.user?.id) pm.collectionVariables.set('userId', data.user.id);",
+                  "  if (data.user?.role) pm.collectionVariables.set('role', data.user.role);",
+                  "}",
+                  "pm.test('login returns 200', () => pm.expect(pm.response.code).to.equal(200));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"user\": {\n    \"id\": \"65f1a2b3c4d5e6f7a8b9c0d1\",\n    \"name\": \"Aman Verma\",\n    \"email\": \"aman@sentry.dev\",\n    \"role\": \"employee\",\n    \"disabled\": false,\n    \"face_enrolled\": true\n  },\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n}"
+            },
+            {
+              "name": "401 Invalid credentials",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Incorrect email or password\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Returns the currently authenticated user. Use this to verify the JWT is valid."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"65f1a2b3c4d5e6f7a8b9c0d1\",\n  \"name\": \"Aman Verma\",\n  \"email\": \"aman@sentry.dev\",\n  \"role\": \"employee\",\n  \"disabled\": false,\n  \"face_enrolled\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Face Recognition",
+      "description": "Face enrollment and verification. Selfies are sent as base64 dataURLs.",
+      "item": [
+        {
+          "name": "Enroll Face",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/face/enroll",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "face", "enroll"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"selfie_base64\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/...\",\n  \"liveness_verified\": true\n}"
+            },
+            "description": "Enrolls the current user's face descriptor on the server.\n\n**Body**\n- `selfie_base64` (string, required) — JPEG dataURL\n- `liveness_verified` (bool) — set true if client-side blink detection passed\n\n**Returns** `{ success, descriptor_length }`. Server computes the 128-dim descriptor with `face-recognition` Python lib + OpenCV, stores it on the user record."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"descriptor_length\": 128,\n  \"message\": \"Face enrolled successfully\"\n}"
+            },
+            {
+              "name": "400 No face detected",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"No face detected in image\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Verify Face",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/face/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "face", "verify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"selfie_base64\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/...\",\n  \"liveness_verified\": true\n}"
+            },
+            "description": "Verify a selfie against the enrolled descriptor. Used internally by punch-in/out, also exposed for direct testing.\n\n**Returns** `{ matched, distance, threshold }`. `matched` is `distance < threshold` (default `0.55`)."
+          },
+          "response": [
+            {
+              "name": "200 Match",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"matched\": true,\n  \"distance\": 0.412,\n  \"threshold\": 0.55\n}"
+            },
+            {
+              "name": "200 No match",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"matched\": false,\n  \"distance\": 0.781,\n  \"threshold\": 0.55\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Attendance",
+      "description": "Punch in / punch out and history queries. Punch endpoints internally call face verification.",
+      "item": [
+        {
+          "name": "Punch In",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/punch-in",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attendance", "punch-in"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"selfie_base64\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/...\",\n  \"liveness_verified\": true,\n  \"geo\": {\n    \"lat\": 23.2599,\n    \"lng\": 77.4126,\n    \"accuracy\": 12.5\n  }\n}"
+            },
+            "description": "Marks the start of an attendance session. Server verifies face → checks geofence (if configured) → creates attendance record.\n\n**Errors**\n- `409` if there's already an open punch for today\n- `403` if face doesn't match\n- `400` if no enrolled descriptor"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('attendanceId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"66a1b2c3d4e5f6789abcdef0\",\n  \"user_id\": \"65f1a2b3c4d5e6f7a8b9c0d1\",\n  \"date\": \"2026-05-05\",\n  \"punch_in\": \"2026-05-05T09:14:23Z\",\n  \"punch_out\": null,\n  \"hours\": 0,\n  \"status\": \"INCOMPLETE\",\n  \"in_geo\": { \"lat\": 23.2599, \"lng\": 77.4126, \"accuracy\": 12.5 },\n  \"face_distance_in\": 0.412,\n  \"in_geofence\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "Punch Out",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/punch-out",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attendance", "punch-out"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"selfie_base64\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/...\",\n  \"liveness_verified\": true,\n  \"geo\": {\n    \"lat\": 23.2599,\n    \"lng\": 77.4126,\n    \"accuracy\": 8.2\n  }\n}"
+            },
+            "description": "Closes the open attendance session. Computes hours, classifies status (PRESENT / INCOMPLETE / OT_PENDING).\n\n**Status logic**\n- `< 8h` → INCOMPLETE\n- `8-8.5h` → PRESENT\n- `> 8.5h` → OT_PENDING (employee must request OT)"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"66a1b2c3d4e5f6789abcdef0\",\n  \"date\": \"2026-05-05\",\n  \"punch_in\": \"2026-05-05T09:14:23Z\",\n  \"punch_out\": \"2026-05-05T18:42:11Z\",\n  \"hours\": 9.46,\n  \"status\": \"OT_PENDING\",\n  \"face_distance_out\": 0.398\n}"
+            }
+          ]
+        },
+        {
+          "name": "My History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/history?start_date=2026-04-01&end_date=2026-05-05&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attendance", "history"],
+              "query": [
+                { "key": "start_date", "value": "2026-04-01" },
+                { "key": "end_date", "value": "2026-05-05" },
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "description": "Current user's attendance history within a date range."
+          },
+          "response": []
+        },
+        {
+          "name": "Today",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attendance", "today"]
+            },
+            "description": "The current user's record for today, or `null` if not punched in yet."
+          },
+          "response": []
+        },
+        {
+          "name": "All (Manager / Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/all?date=2026-05-05&user_id=&status=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attendance", "all"],
+              "query": [
+                { "key": "date", "value": "2026-05-05" },
+                { "key": "user_id", "value": "" },
+                { "key": "status", "value": "" }
+              ]
+            },
+            "description": "All attendance records (admin) or team records (manager). Supports filters: `date`, `user_id`, `status`, `start_date`, `end_date`. Forbidden for `employee`."
+          },
+          "response": [
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"detail\": \"Insufficient role: requires manager or admin\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Overtime",
+      "description": "Overtime request and approval workflow.",
+      "item": [
+        {
+          "name": "Request OT",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/overtime/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "overtime", "request"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"attendance_id\": \"{{attendanceId}}\",\n  \"hours_over\": 1.46,\n  \"reason\": \"Client deployment ran past schedule\"\n}"
+            },
+            "description": "Employee submits an overtime request for a record with `OT_PENDING` status. Uses `{{attendanceId}}` from the most recent Punch In response."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('overtimeId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"66b2c3d4e5f6789abcdef012\",\n  \"user_id\": \"65f1a2b3c4d5e6f7a8b9c0d1\",\n  \"attendance_id\": \"66a1b2c3d4e5f6789abcdef0\",\n  \"hours_over\": 1.46,\n  \"reason\": \"Client deployment ran past schedule\",\n  \"status\": \"pending\",\n  \"created_at\": \"2026-05-05T18:43:02Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "List OT Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/overtime/list?status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "overtime", "list"],
+              "query": [
+                { "key": "status", "value": "pending", "description": "pending | approved | rejected | (omit for all)" }
+              ]
+            },
+            "description": "List overtime requests. Employees see their own; managers/admins see all."
+          },
+          "response": []
+        },
+        {
+          "name": "Decide (Approve / Reject)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/overtime/{{overtimeId}}/decide",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "overtime", "{{overtimeId}}", "decide"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}"
+            },
+            "description": "Manager/admin only. Approves or rejects a pending OT request. On approval, the linked attendance record's status flips to `OT_APPROVED`. On rejection, it reverts to `PRESENT`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only endpoints for user management and record invalidation.",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users"]
+            },
+            "description": "List all users. Admin only."
+          },
+          "response": []
+        },
+        {
+          "name": "Disable User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}/disable",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}", "disable"]
+            },
+            "description": "Disabled users can't log in but their records are preserved. Admin can't disable themselves."
+          },
+          "response": []
+        },
+        {
+          "name": "Enable User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}/enable",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}", "enable"]
+            },
+            "description": "Re-enable a disabled user."
+          },
+          "response": []
+        },
+        {
+          "name": "Flag Record as Invalid",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/attendance/{{attendanceId}}/flag",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "attendance", "{{attendanceId}}", "flag"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Suspected face mismatch — selfie and enrolled descriptor differ visibly\"\n}"
+            },
+            "description": "Admin marks an attendance record as fake/invalid. The record is preserved but excluded from reports and AI tool outputs."
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Flagged Record",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/attendance/{{attendanceId}}/restore",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "attendance", "{{attendanceId}}", "restore"]
+            },
+            "description": "Undo a flag — record returns to its prior status."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "description": "PDF and Excel export endpoints. Returns binary file streams; Postman will offer to save the response.",
+      "item": [
+        {
+          "name": "Attendance — Excel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/attendance.xlsx?start_date=2026-04-01&end_date=2026-05-05",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "attendance.xlsx"],
+              "query": [
+                { "key": "start_date", "value": "2026-04-01" },
+                { "key": "end_date", "value": "2026-05-05" }
+              ]
+            },
+            "description": "Excel export. Scoped by role: employee = own, manager = team, admin = all.\n\nResponse is a binary `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` stream."
+          },
+          "response": []
+        },
+        {
+          "name": "Attendance — PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/attendance.pdf?start_date=2026-04-01&end_date=2026-05-05",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "attendance.pdf"],
+              "query": [
+                { "key": "start_date", "value": "2026-04-01" },
+                { "key": "end_date", "value": "2026-05-05" }
+              ]
+            },
+            "description": "PDF export. Returns `application/pdf`."
+          },
+          "response": []
+        },
+        {
+          "name": "Overtime — Excel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/overtime.xlsx",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "overtime.xlsx"]
+            },
+            "description": "All overtime requests with status and decision metadata."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI Assistant",
+      "description": "Natural-language query endpoint. Backend forwards the question to Gemini with a tool spec, executes the chosen tool against MongoDB, then asks Gemini to format a response.",
+      "item": [
+        {
+          "name": "Ask",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/ask",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ai", "ask"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Who came in late today?\"\n}"
+            },
+            "description": "Manager/admin only.\n\n**Available tools** (Gemini picks one based on the question):\n- `get_late_arrivals(date?, threshold_hour?)`\n- `get_employees_under_8hrs(date?)`\n- `get_pending_overtime()`\n- `get_attendance_summary(start_date?, end_date?)`\n- `get_user_history(name, limit?)`\n- `get_disabled_users()`\n\n**Returns** `{ answer, tool_used, tool_args, tool_result }` so the frontend can show what the agent did.\n\n**Try these questions**\n- \"Who came in late today?\"\n- \"Show me employees with under 8 hours yesterday\"\n- \"Any pending overtime requests?\"\n- \"Give me a summary for this week\"\n- \"Show Aman's last 5 records\"\n- \"Which users are disabled?\""
+          },
+          "response": [
+            {
+              "name": "200 OK — late arrivals",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"answer\": \"Two employees punched in after 9 AM today: Riya Sharma at 09:42 and Aman Verma at 10:15.\",\n  \"tool_used\": \"get_late_arrivals\",\n  \"tool_args\": { \"date\": \"2026-05-05\", \"threshold_hour\": 9 },\n  \"tool_result\": [\n    { \"name\": \"Riya Sharma\", \"email\": \"riya@sentry.dev\", \"punch_in\": \"09:42\", \"date\": \"2026-05-05\" },\n    { \"name\": \"Aman Verma\", \"email\": \"aman@sentry.dev\", \"punch_in\": \"10:15\", \"date\": \"2026-05-05\" }\n  ]\n}"
+            },
+            {
+              "name": "200 OK — summary",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"answer\": \"This week (May 1–5): 23 records, 18 present, 4 incomplete, 1 OT pending. Total 184.5 hours worked.\",\n  \"tool_used\": \"get_attendance_summary\",\n  \"tool_args\": { \"start_date\": \"2026-05-01\", \"end_date\": \"2026-05-05\" },\n  \"tool_result\": {\n    \"range\": \"2026-05-01 to 2026-05-05\",\n    \"total_records\": 23,\n    \"present\": 18,\n    \"incomplete\": 4,\n    \"ot_pending\": 1,\n    \"total_hours\": 184.5\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "External — Gemini API",
+      "description": "The actual external API call the single-file app makes from the browser. Test it standalone — useful for verifying your `geminiKey` works and for debugging tool-calling prompts.",
+      "item": [
+        {
+          "name": "Generate Content (tool-call style)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "https://generativelanguage.googleapis.com/v1beta/models/{{model}}:generateContent?key={{geminiKey}}",
+              "protocol": "https",
+              "host": ["generativelanguage", "googleapis", "com"],
+              "path": ["v1beta", "models", "{{model}}:generateContent"],
+              "query": [{ "key": "key", "value": "{{geminiKey}}" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [{\n        \"text\": \"You are SENTRY, an attendance analytics assistant.\\n\\nAvailable functions:\\n- get_late_arrivals(date, threshold_hour): list employees who punched in after threshold_hour on date\\n- get_pending_overtime(): list pending OT requests\\n- get_attendance_summary(start_date, end_date): summary stats\\n\\nToday's date is 2026-05-05.\\n\\nTo call a function, respond with ONLY a JSON code block:\\n```json\\n{ \\\"tool\\\": \\\"name\\\", \\\"args\\\": { ... } }\\n```\\n\\nUser question: who came late today\"\n      }]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.3\n  }\n}"
+            },
+            "description": "Direct Gemini API call. This is exactly what the browser sends in the single-file app.\n\n**Set up first**\n- Variable `geminiKey` — your Gemini API key\n- Variable `model` — `gemini-2.0-flash` (default), `gemini-2.5-flash`, or `gemini-1.5-flash`\n\n**Expected response** — a JSON tool-call block, e.g.:\n```json\n{ \"tool\": \"get_late_arrivals\", \"args\": { \"date\": \"2026-05-05\", \"threshold_hour\": 9 } }\n```\n\nThe app then executes that tool locally and sends a follow-up turn with the result, asking Gemini to format the final answer."
+          },
+          "response": [
+            {
+              "name": "200 OK — tool call",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"```json\\n{ \\\"tool\\\": \\\"get_late_arrivals\\\", \\\"args\\\": { \\\"date\\\": \\\"2026-05-05\\\", \\\"threshold_hour\\\": 9 } }\\n```\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 187,\n    \"candidatesTokenCount\": 42,\n    \"totalTokenCount\": 229\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Generate Content (follow-up with tool result)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "https://generativelanguage.googleapis.com/v1beta/models/{{model}}:generateContent?key={{geminiKey}}",
+              "protocol": "https",
+              "host": ["generativelanguage", "googleapis", "com"],
+              "path": ["v1beta", "models", "{{model}}:generateContent"],
+              "query": [{ "key": "key", "value": "{{geminiKey}}" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contents\": [\n    { \"role\": \"user\", \"parts\": [{ \"text\": \"who came late today\" }] },\n    { \"role\": \"model\", \"parts\": [{ \"text\": \"```json\\n{ \\\"tool\\\": \\\"get_late_arrivals\\\", \\\"args\\\": { \\\"date\\\": \\\"2026-05-05\\\", \\\"threshold_hour\\\": 9 } }\\n```\" }] },\n    {\n      \"role\": \"user\",\n      \"parts\": [{\n        \"text\": \"TOOL RESULT for get_late_arrivals:\\n```json\\n[\\n  { \\\"name\\\": \\\"Riya Sharma\\\", \\\"punch_in\\\": \\\"09:42\\\" },\\n  { \\\"name\\\": \\\"Aman Verma\\\", \\\"punch_in\\\": \\\"10:15\\\" }\\n]\\n```\\n\\nNow answer the original question concisely.\"\n      }]\n    }\n  ],\n  \"generationConfig\": { \"temperature\": 0.3 }\n}"
+            },
+            "description": "The second turn — feed the tool result back to Gemini and ask it to format the answer for the user. This is the second `_callGemini()` call inside the app's `AI.ask()` function."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "Backend base URL. Use http://localhost:8000 for local FastAPI dev, or your Render URL once deployed."
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "JWT token. Auto-populated by the Login request's test script."
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated from Signup/Login response."
+    },
+    {
+      "key": "role",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated from Login response — used for sanity checks in test scripts."
+    },
+    {
+      "key": "attendanceId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated by Punch In response. Used by Overtime Request and Admin Flag."
+    },
+    {
+      "key": "overtimeId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated by Request OT response. Used by Decide."
+    },
+    {
+      "key": "geminiKey",
+      "value": "",
+      "type": "string",
+      "description": "Get one free at https://aistudio.google.com/apikey"
+    },
+    {
+      "key": "model",
+      "value": "gemini-2.0-flash",
+      "type": "string",
+      "description": "gemini-2.0-flash | gemini-2.5-flash | gemini-1.5-flash"
+    }
+  ]
+}
